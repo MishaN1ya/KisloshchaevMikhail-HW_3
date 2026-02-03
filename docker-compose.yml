@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: airflow-postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init_scripts:/docker-entrypoint-initdb.d
+    environment:
+      POSTGRES_USER: Mikhail
+      POSTGRES_PASSWORD: Kisloshchaev
+      POSTGRES_DB: hse_etl
+      POSTGRES_HOST_AUTH_METHOD: md5
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U Mikhail -d hse_etl"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  airflow-webserver:
+    image: apache/airflow:2.10.1
+    container_name: airflow-webserver
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__WEBSERVER__SECRET_KEY: '#######################'
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://Mikhail:Kisloshchaev@postgres:5432/hse_etl
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__FERNET_KEY: '#######################'
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./data:/opt/airflow/data
+    ports:
+      - "8080:8080"
+    command: >
+      bash -c "
+        airflow db upgrade &&
+        airflow users create --username admin --password admin --firstname Admin --lastname Admin --role Admin --email admin@example.com &&
+        airflow webserver
+      "
+    restart: unless-stopped
+
+  airflow-scheduler:
+    image: apache/airflow:2.10.1
+    container_name: airflow-scheduler
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-webserver:
+        condition: service_started
+    environment:
+      AIRFLOW__WEBSERVER__SECRET_KEY: '#######################'
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://Mikhail:Kisloshchaev@postgres:5432/hse_etl
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__FERNET_KEY: '#######################'
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./data:/opt/airflow/data
+    command: scheduler
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
